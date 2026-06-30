@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบรายงานตรวจบุคลิกภาพ - ลานจอดและจราจร</title>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        /* ===== ธีมสว่าง (ค่าเริ่มต้น) ===== */
+        :root {
+            --primary: #e91e63;
+            --primary-dark: #c2185b;
+            --success: #27ae60;
+            --danger: #e74c3c;
+            --warning: #e67e22;
+            --bg: #fce4ec;          /* พื้นหลังหน้าจอ */
+            --header-pink: #f8bbd0;  /* แถบหัวข้อ */
+            --header-border: #f48fb1;
+            --card: #ffffff;         /* พื้นการ์ด */
+            --text: #2c3e50;         /* สีตัวอักษรหลัก */
+            --text-muted: #7f8c8d;
+            --input-bg: #ffffff;
+            --input-border: #dddddd;
+            --item-border: #eeeeee;
+        }
+        /* ===== ธีมมืด: override เฉพาะค่าที่ต้องเปลี่ยน ===== */
+        /* ทำไม: ใช้ CSS variables ตัวเดียวกัน ทำให้สลับธีมได้โดยไม่ต้องเขียน CSS ซ้ำทั้งชุด */
+        [data-theme="dark"] {
+            --bg: #1a1320;
+            --header-pink: #4a2738;
+            --header-border: #7a3f57;
+            --card: #2a2030;
+            --text: #f5eef2;
+            --text-muted: #b59cab;
+            --input-bg: #352a3d;
+            --input-border: #574a60;
+            --item-border: #463a50;
+        }
+
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Sarabun', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            padding: 15px;
+            margin: 0;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .container {
+            max-width: 500px; background: var(--card); padding: 20px;
+            border-radius: 20px; box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+            margin: auto; transition: background-color 0.3s;
+        }
+
+        /* ===== ปุ่มสลับธีม (มุมขวาบนของการ์ด) ===== */
+        .top-bar { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+        .theme-toggle {
+            background: var(--input-bg); border: 1px solid var(--input-border);
+            color: var(--text); width: 44px; height: 44px; border-radius: 50%;
+            font-size: 20px; cursor: pointer; transition: 0.3s; line-height: 1;
+        }
+        .theme-toggle:active { transform: scale(0.92); }
+
+        .main-header {
+            background-color: var(--header-pink); padding: 15px; border-radius: 15px;
+            border: 2px solid var(--header-border); margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.08);
+        }
+        h2 { text-align: center; color: var(--text); margin: 0; font-size: 22px; }
+
+        .section { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; color: var(--text); }
+
+        select, textarea, input[type="date"], input[type="text"] {
+            width: 100%; padding: 12px; border-radius: 12px;
+            border: 1px solid var(--input-border); font-size: 16px;
+            background: var(--input-bg); color: var(--text);
+            font-family: 'Sarabun', sans-serif;
+        }
+
+        /* ===== กลุ่มปุ่มแนบรูป: ถ่ายภาพ / เลือกคลังภาพ ===== */
+        /* ทำไมแยก 2 ปุ่ม: ปุ่ม "ถ่ายภาพ" ใช้ capture=environment เปิดกล้องตรง ๆ */
+        /* ส่วน "เลือกคลังภาพ" ไม่มี capture เพื่อให้เปิดแกลเลอรี — รองรับทั้ง Android/iOS */
+        .img-btn-group { display: flex; gap: 10px; }
+        .img-btn {
+            flex: 1; padding: 14px; border-radius: 12px; border: 2px dashed var(--header-border);
+            background: var(--input-bg); color: var(--text); font-size: 15px; font-weight: bold;
+            cursor: pointer; transition: 0.2s; font-family: 'Sarabun', sans-serif;
+        }
+        .img-btn:active { transform: scale(0.97); }
+        .hidden-file { display: none; }
+        #previewWrap { margin-top: 12px; text-align: center; display: none; }
+        #previewImg { max-width: 100%; max-height: 220px; border-radius: 12px; border: 2px solid var(--header-border); }
+        .btn-clear-img {
+            display: block; margin: 8px auto 0; background: none; border: none;
+            color: var(--danger); font-size: 14px; cursor: pointer; text-decoration: underline;
+        }
+
+        .checklist-item {
+            display: flex; align-items: center; background: var(--input-bg);
+            padding: 12px; margin-bottom: 8px; border-radius: 12px;
+            border: 1px solid var(--item-border); box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            cursor: pointer; color: var(--text);
+        }
+        .checklist-item input { width: 22px; height: 22px; margin-right: 15px; cursor: pointer; accent-color: var(--primary); }
+
+        .btn-main {
+            width: 100%; padding: 16px; background: var(--primary); color: white; border: none;
+            border-radius: 12px; font-size: 18px; font-weight: bold; cursor: pointer;
+            margin-top: 10px; transition: 0.3s;
+        }
+        .btn-main:disabled { background: #aaa; cursor: not-allowed; }
+        .btn-save-img {
+            width: 100%; padding: 16px; background: var(--warning); color: white; border: none;
+            border-radius: 12px; font-size: 18px; font-weight: bold; cursor: pointer;
+            margin-top: 10px; display: none;
+        }
+
+        /* พื้นที่ capture ซ่อนนอกจอ — บังคับธีมสว่างเสมอเพื่อให้รูป export อ่านง่าย */
+        #captureArea {
+            position: fixed; left: -9999px; top: 0; width: 450px; padding: 25px;
+            background: #fce4ec; color: #2c3e50;
+        }
+        #captureArea h3, #captureArea p, #captureArea strong, #captureArea span { color: #2c3e50; }
+
+        #resultContainer { display: none; margin-top: 25px; text-align: center; border-top: 2px dashed var(--header-border); padding-top: 20px; }
+        #finalReportImage { width: 100%; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.15); border: 4px solid white; }
+
+        .report-header { text-align: center; border-bottom: 2px solid #e0d8c8; padding-bottom: 10px; margin-bottom: 15px; }
+        .status-badge { display: inline-block; padding: 8px 20px; border-radius: 30px; color: white !important; font-weight: bold; font-size: 20px; margin-top: 5px; }
+        .status-pass { background-color: var(--success); }
+        .status-fail { background-color: var(--danger); }
+
+        .info-row { margin-bottom: 10px; font-size: 16px; border-bottom: 1px solid #eeebe3; padding-bottom: 5px; text-align: left; }
+        .text-pass { color: var(--success) !important; font-weight: bold; }
+        .text-fail { color: var(--danger) !important; font-weight: bold; }
+        #resImg { width: 100%; border-radius: 10px; margin-top: 15px; display: none; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .footer-text { text-align: center; font-size: 10px; color: #999; margin-top: 15px; }
+        .instruction { font-size: 14px; color: var(--warning); margin-bottom: 10px; font-weight: bold; }
+
+        /* กล่องแจ้งเตือน (toast) */
+        #toast {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(100px);
+            background: var(--text); color: var(--card); padding: 12px 24px; border-radius: 30px;
+            font-size: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); opacity: 0;
+            transition: 0.4s; z-index: 9999; max-width: 90vw; text-align: center;
+        }
+        #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="top-bar">
+        <button id="themeToggle" class="theme-toggle" title="สลับโหมดมืด/สว่าง" onclick="toggleTheme()">🌙</button>
+    </div>
+
+    <div class="main-header">
+        <h2>📋 ตรวจบุคลิกภาพ แผนกลานจอดและจราจร</h2>
+    </div>
+
+    <div class="section">
+        <label>📅 วันที่ตรวจ:</label>
+        <input type="date" id="checkDate">
+    </div>
+
+    <div class="section">
+        <label>👤 ชื่อเจ้าหน้าที่:</label>
+        <select id="staffName">
+            <option value="">-- เลือกรายชื่อ --</option>
+            <option value="21759 นาย เกรียงศักดิ์ ศรีสลับ">21759 นาย เกรียงศักดิ์ ศรีสลับ</option>
+            <option value="21535 นาย สรายุทธิ ติยะบุตร">21535 นาย สรายุทธิ ติยะบุตร</option>
+            <option value="21566 นาย สมชาย ทวีไพศาล">21566 นาย สมชาย ทวีไพศาล</option>
+            <option value="22121 นาย ณัฐพล คำนัน">22121 นาย ณัฐพล คำนัน</option>
+            <option value="22017 นาย เกียรติชัย กิ่งแก้ว">22017 นาย เกียรติชัย กิ่งแก้ว</option>
+            <option value="22089 นาย สุวิทย์ พิมพ์ศรี">22089 นาย สุวิทย์ พิมพ์ศรี</option>
+            <option value="21931 นาย ธำรงค์ศักดิ์ มณีจันทรา">21931 นาย ธำรงค์ศักดิ์ มณีจันทรา</option>
+            <option value="21419 นาย หาญพงศ์ ทองอร่าม">21419 นาย หาญพงศ์ ทองอร่าม</option>
+            <option value="22052 นาย นภัทร พัฒน์พิภพ">22052 นาย นภัทร พัฒน์พิภพ</option>
+            <option value="22032 นาย บุญฤทธิ์ เกตุแก้ว">22032 นาย บุญฤทธิ์ เกตุแก้ว</option>
+            <option value="21344 นาย พิพัฒน์ สุวรรณไตยรัตย์">21344 นาย พิพัฒน์ สุวรรณไตยรัตย์</option>
+            <option value="22102 นาย ลิขิต ชะนะหาญ">22102 นาย ลิขิต ชะนะหาญ</option>
+            <option value="22127 นาย ศรัน คำดำ">22127 นาย ศรัน คำดำ</option>
+            <option value="22031 นาย ศรัณยู ช่วยศีริ">22031 นาย ศรัณยู ช่วยศีริ</option>
+            <option value="21595 นาย บันเทิง คุ้มหนองฮี">21595 นาย บันเทิง คุ้มหนองฮี</option>
+            <option value="21966 น.ส. คมคาย สอนสังข์">21966 น.ส. คมคาย สอนสังข์</option>
+            <option value="21395 นาย ระเบียบ พรหมปากดี">21395 นาย ระเบียบ พรหมปากดี</option>
+            <option value="21991 นาย เจษฎา มนุษย์">21991 นาย เจษฎา มนุษย์</option>
+            <option value="22124 นาย กฤษฎา กอคูณกลาง">22124 นาย กฤษฎา กอคูณกลาง</option>
+            <option value="22023 นาย กฤตนันท์ ลับบัวงาม">22023 นาย กฤตนันท์ ลับบัวงาม</option>
+            <option value="22033 นาย ภาสกร โพธิสุวรรณ">22033 นาย ภาสกร โพธิสุวรรณ</option>
+            <option value="22065 นาย ธวัชชัย กันตัด">22065 นาย ธวัชชัย กันตัด</option>
+            <option value="22095 นาย นรพนธ์ บุตรดาเคย">22095 นาย นรพนธ์ บุตรดาเคย</option>
+            <option value="21309 นาย พรชัย ทวียิ่งสกุล">21309 นาย พรชัย ทวียิ่งสกุล</option>
+            <option value="21819 นาย มงคล สิงห์สุข">21819 นาย มงคล สิงห์สุข</option>
+            <option value="21626 น.ส. จันทิมา พานิชผล">21626 น.ส. จันทิมา พานิชผล</option>
+            <option value="21615 นาย สมัชชา ฉิมน้อย">21615 นาย สมัชชา ฉิมน้อย</option>
+            <option value="21797 นาย ชัยวัฒน์ เสมมีสุข">21797 นาย ชัยวัฒน์ เสมมีสุข</option>
+            <option value="22147 นาย วุฒิพงศ์ วงษาแก้ว">22147 นาย วุฒิพงศ์ วงษาแก้ว</option>
+            <option value="22003 นาย อนุวัฒน์ ฝ่ายสูนย์">22003 นาย อนุวัฒน์ ฝ่ายสูนย์</option>
+            <option value="__other__">✏️ อื่นๆ (ระบุเอง)</option>
+        </select>
+        <input type="text" id="staffNameCustom" placeholder="ระบุรหัสและชื่อเจ้าหน้าที่..."
+               style="display:none; margin-top:8px;">
+    </div>
+
+    <div class="section">
+        <label>📸 แนบรูปภาพ (ถ่ายภาพ หรือ เลือกจากคลัง):</label>
+        <div class="img-btn-group">
+            <button type="button" class="img-btn" onclick="document.getElementById('imgCamera').click()">📷 ถ่ายภาพ</button>
+            <button type="button" class="img-btn" onclick="document.getElementById('imgGallery').click()">🖼️ เลือกคลังภาพ</button>
+        </div>
+        <!-- input แยก 2 ตัว: capture=environment เปิดกล้องหลัง / อีกตัวเปิดคลังภาพ -->
+        <input type="file" id="imgCamera" class="hidden-file" accept="image/*" capture="environment">
+        <input type="file" id="imgGallery" class="hidden-file" accept="image/*">
+        <div id="previewWrap">
+            <img id="previewImg" src="" alt="ตัวอย่างรูป">
+            <button type="button" class="btn-clear-img" onclick="clearImage()">✕ ลบรูปนี้</button>
+        </div>
+    </div>
+
+    <div class="section">
+        <label>✅ รายการตรวจ (ผ่าน 5 ข้อขึ้นไป จาก 7 ข้อ = ผ่าน):</label>
+        <div id="checkListGroup">
+            <label class="checklist-item"><input type="checkbox" class="task" value="ทรงผม"> 1. ทรงผมเรียบร้อย</label>
+            <label class="checklist-item"><input type="checkbox" class="task" value="หนวด/เครา"> 2. โกนหนวด/เครา</label>
+            <label class="checklist-item"><input type="checkbox" class="task" value="เล็บ"> 3. ตัดเล็บสะอาด</label>
+            <label class="checklist-item"><input type="checkbox" class="task" value="เสื้อผ้า"> 4. เสื้อผ้าสะอาด/เรียบร้อย</label>
+            <label class="checklist-item"><input type="checkbox" class="task" value="กางเกง"> 5. กางเกงสุภาพ</label>
+            <label class="checklist-item"><input type="checkbox" class="task" value="รองเท้า"> 6. รองเท้าขัดเงา</label>
+            <label class="checklist-item"><input type="checkbox" class="task" value="กลิ่นตัว/ความสะอาด"> 7. กลิ่นตัว/ความสะอาด</label>
+        </div>
+    </div>
+
+    <div class="section">
+        <label>📝 หมายเหตุ:</label>
+        <textarea id="note" rows="2" placeholder="ระบุเหตุผล..."></textarea>
+    </div>
+
+    <button id="mainBtn" class="btn-main" onclick="generateReport()">📊 บันทึกข้อมูลและสรุปรายงาน</button>
+    <button id="saveBtn" class="btn-save-img" onclick="saveOrShare()">💾 บันทึก / แชร์รูปภาพ</button>
+
+    <div id="resultContainer">
+        <p class="instruction" id="instruction"></p>
+        <img id="finalReportImage" src="" alt="รายงาน">
+    </div>
+
+    <!-- พื้นที่สร้างรูป (ซ่อนนอกจอ) -->
+    <div id="captureArea">
+        <div class="report-header">
+            <h3 style="margin:0;">✨ รายงานตรวจบุคลิกภาพ ✨</h3>
+            <p id="showDate" style="font-size:14px; margin:5px 0;"></p>
+            <div id="resStatusBadge" class="status-badge"></div>
+        </div>
+        <div class="info-row"><strong>👤 เจ้าหน้าที่:</strong> <span id="resName"></span></div>
+        <div class="info-row"><strong>🏆 คะแนน:</strong> <span id="resScore"></span></div>
+        <div class="info-row"><strong>✅ หัวข้อที่ผ่าน:</strong> <br><span id="resTasks" class="text-pass" style="font-size:14px;"></span></div>
+        <div id="failRow" class="info-row"><strong>❌ หัวข้อที่ไม่ผ่าน:</strong> <br><span id="resFailTasks" class="text-fail" style="font-size:14px;"></span></div>
+        <div class="info-row"><strong>📝 หมายเหตุ:</strong> <span id="resNote"></span></div>
+        <img id="resImg" src="">
+        <p class="footer-text">บันทึกข้อมูลเมื่อ: <span id="resTimestamp"></span></p>
+    </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* =========================================================
+   ค่าคงที่และตัวแปรสถานะ
+   ========================================================= */
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxt9kMeJVNB0bLKUummv5WHGXtUzDXjXjbKAwKk_f8__CCWwRG6LkCiIiDsj7jMGKMG/exec';
+const PASS_THRESHOLD = 5;
+const THEME_KEY = 'sbk_personality_theme';
+
+let currentCanvas = null;   // เก็บ canvas ล่าสุดไว้ดาวน์โหลด/แชร์ซ้ำ
+let selectedFile = null;    // ไฟล์รูปที่ผู้ใช้เลือก (จากกล้องหรือคลัง)
+const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+/* helper สั้น ๆ */
+const $ = (id) => document.getElementById(id);
+
+/* =========================================================
+   เริ่มต้น (init)
+   ========================================================= */
+function init() {
+    try {
+        $('checkDate').valueAsDate = new Date();
+        loadTheme();
+
+        // เลือกชื่อ "อื่นๆ" → แสดงช่องกรอกเอง
+        $('staffName').addEventListener('change', function () {
+            const custom = $('staffNameCustom');
+            const isOther = this.value === '__other__';
+            custom.style.display = isOther ? 'block' : 'none';
+            if (isOther) { custom.focus(); } else { custom.value = ''; }
+        });
+
+        // ผูก input รูปทั้ง 2 ตัว (กล้อง + คลัง) เข้ากับตัวจัดการเดียว
+        $('imgCamera').addEventListener('change', handleImagePick);
+        $('imgGallery').addEventListener('change', handleImagePick);
+    } catch (err) {
+        console.error('init error', err);
+    }
+}
+
+/* =========================================================
+   โหมดมืด-สว่าง
+   ========================================================= */
+function loadTheme() {
+    // อ่านค่าที่เคยเลือกไว้ ถ้าไม่มีให้ดูค่า system preference
+    let theme = null;
+    try { theme = localStorage.getItem(THEME_KEY); } catch (e) {}
+    if (!theme) {
+        theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    applyTheme(theme);
+}
+
+function applyTheme(theme) {
+    if (theme === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        $('themeToggle').textContent = '☀️';
+    } else {
+        document.documentElement.removeAttribute('data-theme');
+        $('themeToggle').textContent = '🌙';
+    }
+}
+
+function toggleTheme() {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const next = isDark ? 'light' : 'dark';
+    applyTheme(next);
+    try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+}
+
+/* =========================================================
+   จัดการรูปภาพ (กล้อง / คลัง)
+   ========================================================= */
+function handleImagePick(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+
+    // ตรวจชนิดและขนาดไฟล์ ป้องกันไฟล์ผิดประเภท/ใหญ่เกิน
+    if (!file.type.startsWith('image/')) {
+        showToast('ไฟล์ที่เลือกไม่ใช่รูปภาพ');
+        return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+        showToast('รูปใหญ่เกิน 20MB กรุณาเลือกรูปอื่น');
+        return;
+    }
+
+    selectedFile = file;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        $('previewImg').src = ev.target.result;
+        $('previewWrap').style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+}
+
+function clearImage() {
+    selectedFile = null;
+    $('imgCamera').value = '';
+    $('imgGallery').value = '';
+    $('previewImg').src = '';
+    $('previewWrap').style.display = 'none';
+}
+
+/* =========================================================
+   ส่งข้อมูลไป Google Sheets (อัตโนมัติ ทั้ง Android และ iOS)
+   ========================================================= */
+async function sendToDatabase(data) {
+    // ใช้ no-cors เพราะเปิดจากไฟล์ภายในเครื่อง อ่าน response ไม่ได้ แต่ส่งถึงปลายทาง
+    try {
+        await fetch(SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        return true;
+    } catch (error) {
+        console.error('Error sending data', error);
+        return false;
+    }
+}
+
+/* =========================================================
+   สร้างรายงาน
+   ========================================================= */
+function generateReport() {
+    try {
+        const selectVal = $('staffName').value;
+        if (!selectVal) { showToast('กรุณาเลือกชื่อเจ้าหน้าที่ก่อน'); return; }
+
+        let fullName = selectVal;
+        if (selectVal === '__other__') {
+            fullName = $('staffNameCustom').value.trim();
+            if (!fullName) { showToast('กรุณาระบุชื่อเจ้าหน้าที่ในช่องด้านล่าง'); return; }
+        }
+
+        const empID = fullName.substring(0, 5).trim();
+        const empName = fullName.substring(5).trim();
+
+        const mainBtn = $('mainBtn');
+        mainBtn.disabled = true;
+        mainBtn.textContent = 'กำลังบันทึก...';
+
+        const allTasks = Array.from(document.querySelectorAll('.task'));
+        const passedTasks = allTasks.filter(t => t.checked);
+        const failedTasks = allTasks.filter(t => !t.checked);
+        const score = passedTasks.length;
+        const timestamp = new Date().toLocaleString('th-TH');
+        const statusText = score >= PASS_THRESHOLD ? 'ผ่านเกณฑ์' : 'ไม่ผ่านเกณฑ์';
+
+        const d = new Date($('checkDate').value);
+        $('showDate').textContent = 'ประจำวันที่ ' + d.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' });
+        $('resName').textContent = fullName;
+        $('resScore').textContent = score + ' / 7';
+        $('resNote').textContent = $('note').value || '-';
+        $('resTasks').textContent = passedTasks.map(t => t.value).join(', ') || 'ไม่มี';
+        $('resTimestamp').textContent = timestamp;
+
+        if (failedTasks.length > 0) {
+            $('resFailTasks').textContent = failedTasks.map(t => t.value).join(', ');
+            $('failRow').style.display = 'block';
+        } else {
+            $('failRow').style.display = 'none';
+        }
+
+        const statusBadge = $('resStatusBadge');
+        if (score >= PASS_THRESHOLD) {
+            statusBadge.textContent = 'ผ่านเกณฑ์ ✅';
+            statusBadge.className = 'status-badge status-pass';
+        } else {
+            statusBadge.textContent = 'ไม่ผ่านเกณฑ์ ❌';
+            statusBadge.className = 'status-badge status-fail';
+        }
+
+        // ใส่รูปลงรายงาน (ถ้ามี) แล้วค่อย render เป็นภาพ
+        const resImg = $('resImg');
+        if (selectedFile) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                resImg.src = e.target.result;
+                resImg.style.display = 'block';
+                setTimeout(processFinalImage, 500);
+            };
+            reader.readAsDataURL(selectedFile);
+        } else {
+            resImg.style.display = 'none';
+            setTimeout(processFinalImage, 500);
+        }
+
+        // บันทึกลง Google Sheets อัตโนมัติ
+        sendToDatabase({
+            date: $('checkDate').value,
+            empID, name: empName, score,
+            passed: passedTasks.map(t => t.value).join(', '),
+            failed: failedTasks.map(t => t.value).join(', '),
+            note: $('note').value || '-',
+            status: statusText
+        });
+    } catch (err) {
+        console.error('generateReport error', err);
+        resetMainBtn();
+        showToast('เกิดข้อผิดพลาด กรุณาลองใหม่');
+    }
+}
+
+/* =========================================================
+   แปลงรายงานเป็นรูปภาพด้วย html2canvas
+   ========================================================= */
+function processFinalImage() {
+    const area = $('captureArea');
+    html2canvas(area, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#fce4ec'  // รูป export เป็นโทนสว่างเสมอ ไม่ตามธีมมืด
+    }).then(canvas => {
+        currentCanvas = canvas;
+        $('finalReportImage').src = canvas.toDataURL('image/png');
+        $('resultContainer').style.display = 'block';
+        $('saveBtn').style.display = 'block';
+
+        // Android: ดาวน์โหลดอัตโนมัติทันที (Safari/iOS ทำไม่ได้ ต้องกดปุ่ม)
+        if (!isIOS) {
+            downloadImage();
+            $('instruction').textContent = 'บันทึกสำเร็จ! รูปถูกดาวน์โหลดอัตโนมัติแล้ว';
+        } else {
+            $('instruction').textContent = 'บันทึกข้อมูลสำเร็จ! กดปุ่ม "บันทึก / แชร์รูปภาพ" ด้านบนเพื่อเซฟลงเครื่อง';
+        }
+
+        showToast('✅ บันทึกข้อมูลลงระบบเรียบร้อย');
+        resetMainBtn(true);
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    }).catch(err => {
+        console.error('html2canvas error', err);
+        resetMainBtn();
+        showToast('สร้างรูปไม่สำเร็จ กรุณาลองใหม่');
+    });
+}
+
+function resetMainBtn(done) {
+    const mainBtn = $('mainBtn');
+    mainBtn.disabled = false;
+    mainBtn.textContent = done ? '📊 บันทึกอีกครั้ง' : '📊 บันทึกข้อมูลและสรุปรายงาน';
+}
+
+/* =========================================================
+   บันทึก / แชร์รูป — เลือกวิธีให้เหมาะกับแต่ละเครื่อง
+   ========================================================= */
+async function saveOrShare() {
+    if (!currentCanvas) return;
+
+    // iOS: ใช้ Web Share API เซฟลง Photos ได้ง่ายกว่าการกดค้าง
+    if (isIOS && navigator.canShare) {
+        try {
+            const blob = await new Promise(res => currentCanvas.toBlob(res, 'image/png'));
+            const fileName = buildFileName();
+            const file = new File([blob], fileName, { type: 'image/png' });
+            if (navigator.canShare({ files: [file] })) {
+                await navigator.share({ files: [file], title: 'รายงานตรวจบุคลิกภาพ' });
+                return;
+            }
+        } catch (err) {
+            // ผู้ใช้กดยกเลิก หรือเครื่องไม่รองรับ → ตกไปใช้วิธีดาวน์โหลดปกติ
+            if (err && err.name === 'AbortError') return;
+            console.warn('share failed, fallback to download', err);
+        }
+    }
+
+    // Android และเครื่องอื่น ๆ: ดาวน์โหลดไฟล์ตรง ๆ
+    downloadImage();
+}
+
+function downloadImage() {
+    if (!currentCanvas) return;
+    const link = document.createElement('a');
+    link.download = buildFileName();
+    link.href = currentCanvas.toDataURL('image/png');
+    link.click();
+}
+
+function buildFileName() {
+    // ตั้งชื่อไฟล์จากชื่อเจ้าหน้าที่ + วันที่ ป้องกันอักขระต้องห้าม
+    const name = ($('resName').textContent || 'Report').replace(/[\\/:*?"<>|]/g, '_').trim();
+    const date = $('checkDate').value || '';
+    return `รายงาน_${name}_${date}.png`;
+}
+
+/* =========================================================
+   Toast แจ้งเตือน
+   ========================================================= */
+let toastTimer = null;
+function showToast(msg) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+/* ตัวจับ error ระดับ global เพื่อไม่ให้แอปค้างเงียบ ๆ */
+window.addEventListener('error', (e) => console.error('global error', e.error || e.message));
+window.addEventListener('unhandledrejection', (e) => console.error('unhandled', e.reason));
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+
+</body>
+</html>
